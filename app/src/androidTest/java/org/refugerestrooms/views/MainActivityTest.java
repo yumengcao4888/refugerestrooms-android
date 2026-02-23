@@ -1,6 +1,6 @@
 package org.refugerestrooms.views;
 
-import androidx.test.rule.ActivityTestRule;
+import androidx.test.ext.junit.rules.ActivityScenarioRule;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 import org.junit.Before;
@@ -12,13 +12,14 @@ import org.junit.runner.RunWith;
 public class MainActivityTest {
 
     @Rule
-    public ActivityTestRule<MainActivity> activityActivityTestRule =
-            new ActivityTestRule<MainActivity>(MainActivity.class);
+    public ActivityScenarioRule<MainActivity> activityScenarioRule =
+            new ActivityScenarioRule<>(MainActivity.class);
 
     @Before
     public void init(){
-        activityActivityTestRule.getActivity()
-                .getSupportFragmentManager().beginTransaction();
+        activityScenarioRule.getScenario().onActivity(activity -> {
+            activity.getSupportFragmentManager().beginTransaction();
+        });
     }
 
     @Test
