@@ -13,25 +13,9 @@ import android.content.pm.PackageManager;
 import android.location.Address;
 import android.location.Location;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.ResultReceiver;
-import androidx.annotation.NonNull;
-import com.google.android.material.bottomsheet.BottomSheetBehavior;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import com.google.android.material.navigation.NavigationView;
-import com.google.android.material.snackbar.Snackbar;
-import androidx.core.app.ActivityCompat;
-import androidx.fragment.app.DialogFragment;
-import androidx.fragment.app.Fragment;
-import androidx.fragment.app.FragmentManager;
-import androidx.fragment.app.FragmentTransaction;
-import androidx.core.content.ContextCompat;
-import androidx.core.view.GravityCompat;
-import androidx.drawerlayout.widget.DrawerLayout;
-import androidx.appcompat.app.ActionBarDrawerToggle;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
 import android.text.Html;
 import android.util.Log;
 import android.view.Menu;
@@ -41,6 +25,24 @@ import android.widget.Button;
 import android.widget.SearchView;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.ActionBarDrawerToggle;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import androidx.core.view.GravityCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
+import androidx.fragment.app.DialogFragment;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
+import androidx.fragment.app.FragmentTransaction;
+import androidx.lifecycle.Observer;
+import androidx.work.Data;
+import androidx.work.OneTimeWorkRequest;
+import androidx.work.WorkInfo;
+import androidx.work.WorkManager;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
@@ -56,6 +58,7 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationSettingsRequest;
 import com.google.android.gms.location.LocationSettingsResponse;
 import com.google.android.gms.location.LocationSettingsStatusCodes;
+import com.google.android.gms.location.Priority;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapView;
@@ -67,6 +70,10 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
+import com.google.android.material.bottomsheet.BottomSheetBehavior;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.navigation.NavigationView;
+import com.google.android.material.snackbar.Snackbar;
 
 import org.refugerestrooms.R;
 import org.refugerestrooms.application.RefugeRestroomApplication;
@@ -78,7 +85,7 @@ import org.refugerestrooms.database.model.DatabaseEntityConverter;
 import org.refugerestrooms.models.Bathroom;
 import org.refugerestrooms.models.Haversine;
 import org.refugerestrooms.servers.Server;
-import org.refugerestrooms.services.GeocodeAddressIntentService;
+import org.refugerestrooms.services.GeocodeAddressWorker;
 
 import java.util.HashMap;
 import java.util.List;
@@ -118,7 +125,6 @@ public class MainActivity extends AppCompatActivity
     public boolean doNotDisplayDialog;
     protected LatLng mStart;
     protected LatLng mEnd;
-    private ResultReceiver mResultReceiver;
     // temp lat/lng for setting up initial map
     private static final LatLng COFFMAN = new LatLng(44.972905, -93.235613);
 
@@ -231,17 +237,19 @@ public class MainActivity extends AppCompatActivity
                             public void onLocationResult(LocationResult locationResult) {
                                 // Updates the current location and position
                                 mCurrentLocation = locationResult.getLastLocation();
-                                double tmpLat = mCurrentLocation.getLatitude();
-                                double tmpLng = mCurrentLocation.getLongitude();
-                                String curLatLng = "lat=" + Double.toString(tmpLat) + "&lng=" + Double.toString(tmpLng);
-                                mCurrentPosition = new LatLng(tmpLat, tmpLng);
-                                // Move the camera to the new position
-                                mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(mCurrentPosition, 15));
-                                onLocationChanged(mCurrentLocation);
-                                // Performs a search on that location
-                                mServer.performSearch(curLatLng, true);
-                                mStart = mCurrentPosition;
-                                mSearchHereButton.setVisibility(View.INVISIBLE);
+                                if (mCurrentLocation != null) {
+                                    double tmpLat = mCurrentLocation.getLatitude();
+                                    double tmpLng = mCurrentLocation.getLongitude();
+                                    String curLatLng = "lat=" + Double.toString(tmpLat) + "&lng=" + Double.toString(tmpLng);
+                                    mCurrentPosition = new LatLng(tmpLat, tmpLng);
+                                    // Move the camera to the new position
+                                    mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(mCurrentPosition, 15));
+                                    onLocationChanged(mCurrentLocation);
+                                    // Performs a search on that location
+                                    mServer.performSearch(curLatLng, true);
+                                    mStart = mCurrentPosition;
+                                    mSearchHereButton.setVisibility(View.INVISIBLE);
+                                }
                             }
                         };
                         // Request a single location for the callback
@@ -501,7 +509,11 @@ public class MainActivity extends AppCompatActivity
         setContentView(R.layout.activity_main);
 
         if (savedInstanceState != null) {
-            mCurrentLocation = savedInstanceState.getParcelable(CURRENT_LOCATION_KEY);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                mCurrentLocation = savedInstanceState.getParcelable(CURRENT_LOCATION_KEY, Location.class);
+            } else {
+                mCurrentLocation = savedInstanceState.getParcelable(CURRENT_LOCATION_KEY);
+            }
         }
 
         mToolbar = findViewById(R.id.toolbar);
@@ -541,27 +553,19 @@ public class MainActivity extends AppCompatActivity
 
         bottomSheet = findViewById(R.id.bottom_info_sheet);
 
-        mResultReceiver = new AddressResultReceiver(null);
         // For search results
         handleIntent(getIntent());
 
         // Create single location request for acquiring only one non-null location.
-        mSingleLocationRequest = LocationRequest.create();
-        // Location Accuracy
-        mSingleLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
-        mSingleLocationRequest.setInterval(UPDATE_INTERVAL);
-        mSingleLocationRequest.setFastestInterval(FASTEST_INTERVAL);
-        // Set the number of updates requested to 1
-        mSingleLocationRequest.setNumUpdates(1);
+        mSingleLocationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, UPDATE_INTERVAL)
+                .setMinUpdateIntervalMillis(FASTEST_INTERVAL)
+                .setMaxUpdates(1)
+                .build();
 
         // Create the LocationRequest object for regular location updates
-        mLocationRequest = LocationRequest.create();
-        // Location Accuracy
-        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
-        // Set the update interval to 5 seconds
-        mLocationRequest.setInterval(UPDATE_INTERVAL);
-        // Set the fastest update interval to 1 second
-        mLocationRequest.setFastestInterval(FASTEST_INTERVAL);
+        mLocationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, UPDATE_INTERVAL)
+                .setMinUpdateIntervalMillis(FASTEST_INTERVAL)
+                .build();
 
         // TODO
         // Checks if gps is enabled, kicks out message to turn on if not.
@@ -584,16 +588,18 @@ public class MainActivity extends AppCompatActivity
                 public void onLocationResult(LocationResult locationResult) {
                     // Updates the current location and position
                     mCurrentLocation = locationResult.getLastLocation();
-                    double tmpLat = mCurrentLocation.getLatitude();
-                    double tmpLng = mCurrentLocation.getLongitude();
-                    String curLatLng = "lat=" + Double.toString(tmpLat) + "&lng=" + Double.toString(tmpLng);
-                    mCurrentPosition = new LatLng(tmpLat, tmpLng);
-                    //TODO Add a setting to enable or disable camera tracking of current position.
-                    //mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(mCurrentPosition, 15));
-                    onLocationChanged(mCurrentLocation);
-                    // Performs a search on that location
-                    mServer.performSearch(curLatLng, true);
-                    mStart = mCurrentPosition;
+                    if (mCurrentLocation != null) {
+                        double tmpLat = mCurrentLocation.getLatitude();
+                        double tmpLng = mCurrentLocation.getLongitude();
+                        String curLatLng = "lat=" + Double.toString(tmpLat) + "&lng=" + Double.toString(tmpLng);
+                        mCurrentPosition = new LatLng(tmpLat, tmpLng);
+                        //TODO Add a setting to enable or disable camera tracking of current position.
+                        //mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(mCurrentPosition, 15));
+                        onLocationChanged(mCurrentLocation);
+                        // Performs a search on that location
+                        mServer.performSearch(curLatLng, true);
+                        mStart = mCurrentPosition;
+                    }
                 }
             };
 
@@ -650,62 +656,57 @@ public class MainActivity extends AppCompatActivity
         if (Intent.ACTION_SEARCH.equals(intent.getAction())) {
             query = intent.getStringExtra(SearchManager.QUERY);
 
-            Intent startGeocodeIntent = new Intent(this, GeocodeAddressIntentService.class);
-            startGeocodeIntent.putExtra(GeocodeAddressIntentService.RECEIVER, mResultReceiver);
-            startGeocodeIntent.putExtra(GeocodeAddressIntentService.LOCATION_NAME_DATA_EXTRA, query);
-            startService(startGeocodeIntent);
+            Data inputData = new Data.Builder()
+                    .putString(GeocodeAddressWorker.LOCATION_NAME_DATA_EXTRA, query)
+                    .build();
+
+            OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(GeocodeAddressWorker.class)
+                    .setInputData(inputData)
+                    .build();
+
+            WorkManager.getInstance(this).enqueue(request);
+
+            WorkManager.getInstance(this).getWorkInfoByIdLiveData(request.getId())
+                    .observe(this, new Observer<WorkInfo>() {
+                        @Override
+                        public void onChanged(WorkInfo workInfo) {
+                            if (workInfo != null && workInfo.getState().isFinished()) {
+                                if (workInfo.getState() == WorkInfo.State.SUCCEEDED) {
+                                    Data outputData = workInfo.getOutputData();
+                                    double lat = outputData.getDouble(GeocodeAddressWorker.RESULT_LAT, 0);
+                                    double lng = outputData.getDouble(GeocodeAddressWorker.RESULT_LNG, 0);
+                                    handleGeocodeResult(lat, lng);
+                                } else if (workInfo.getState() == WorkInfo.State.FAILED) {
+                                    Log.d(TAG, "Location not found.");
+                                    Toast.makeText(MainActivity.this, R.string.location_not_found, Toast.LENGTH_SHORT).show();
+                                }
+                            }
+                        }
+                    });
         }
     }
 
-    // Receiver for address search result
-    class AddressResultReceiver extends ResultReceiver {
-        private AddressResultReceiver(Handler handler) {
-            super(handler);
-        }
+    private void handleGeocodeResult(double latitude, double longitude) {
+        Log.d(TAG, latitude + " " + longitude);
 
-        @Override
-        protected void onReceiveResult(int resultCode, final Bundle resultData) {
-            if (resultCode == GeocodeAddressIntentService.SUCCESS_RESULT) {
-                final Address address = resultData.getParcelable(GeocodeAddressIntentService.RESULT_ADDRESS);
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        assert address != null;
-                        // Get lat and long of searched address
-                        double latitude = address.getLatitude();
-                        double longitude = address.getLongitude();
-                        Log.d(TAG, latitude + " " + longitude);
+        LatLng addressPosition = new LatLng(latitude, longitude);
 
-                        LatLng addressPosition = new LatLng(latitude, longitude);
+        // Set current location and route starting point to searched address
+        Location addressLocation = new Location("");
+        addressLocation.setLatitude(latitude);
+        addressLocation.setLongitude(longitude);
+        onLocationChanged(addressLocation);
+        mStart = addressPosition;
 
-                        // Set current location and route starting point to searched address
-                        Location addressLocation = new Location("");
-                        addressLocation.setLatitude(latitude);
-                        addressLocation.setLongitude(longitude);
-                        onLocationChanged(addressLocation);
-                        mStart = addressPosition;
+        // Move map to searched address
+        mMap.moveCamera(CameraUpdateFactory.newLatLng(addressPosition));
 
-                        // Move map to searched address
-                        mMap.moveCamera(CameraUpdateFactory.newLatLng(addressPosition));
-
-                        // Use the latitude and longitude to search for restrooms
-                        // Boolean to prevent "gps not enabled" dialog box from re-showing on search
-                        doNotDisplayDialog = true;
-                        String searchTerm = Server.getSearchTermFromLatLng(latitude, longitude);
-                        Log.e(TAG, searchTerm);
-                        mServer.performSearch(searchTerm, true);
-                    }
-                });
-            } else {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        Log.d(TAG, "Location not found.");
-                        Toast.makeText(MainActivity.this, R.string.location_not_found, Toast.LENGTH_SHORT).show();
-                    }
-                });
-            }
-        }
+        // Use the latitude and longitude to search for restrooms
+        // Boolean to prevent "gps not enabled" dialog box from re-showing on search
+        doNotDisplayDialog = true;
+        String searchTerm = Server.getSearchTermFromLatLng(latitude, longitude);
+        Log.e(TAG, searchTerm);
+        mServer.performSearch(searchTerm, true);
     }
 
     /**

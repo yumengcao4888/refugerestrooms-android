@@ -17,11 +17,11 @@ android {
         }
     }
     namespace "org.refugerestrooms"
-    compileSdk 34
+    compileSdk 35
     defaultConfig {
         applicationId "org.refugerestrooms"
         minSdkVersion 23
-        targetSdkVersion 34
+        targetSdkVersion 35
         versionCode 20
         versionName "1.7.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -45,7 +45,13 @@ dependencies {
     implementation 'androidx.mediarouter:mediarouter:1.8.1'
     implementation 'androidx.legacy:legacy-support-v4:1.0.0'
     implementation 'com.google.android.material:material:1.13.0'
-    implementation 'androidx.annotation:annotation:1.6.0'
+    implementation 'androidx.annotation:annotation:1.9.1'
+    implementation 'androidx.work:work-runtime:2.11.1'
+    
+    // Explicitly add play-services-base to fix the "Companion object" error in location SDK
+    implementation 'com.google.android.gms:play-services-base:18.10.0'
+    implementation 'com.google.android.gms:play-services-location:21.3.0'
+    implementation 'com.google.android.gms:play-services-maps:20.0.0'
     
     // Excluding legacy support library from third-party libraries
     implementation('com.github.jd-alexander:library:1.1.0') {
@@ -53,8 +59,6 @@ dependencies {
     }
 
     implementation 'com.google.code.gson:gson:2.13.2'
-    implementation 'com.google.android.gms:play-services-location:21.3.0'
-    implementation 'com.google.android.gms:play-services-maps:20.0.0'
     implementation 'de.greenrobot:greendao:2.1.0'
     implementation 'com.android.volley:volley:1.2.1'
 

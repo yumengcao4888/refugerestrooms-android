@@ -28,10 +28,6 @@
             android:name="com.google.android.geo.API_KEY"
             android:value="@string/map_api_key" />
 
-        <service
-            android:name=".services.GeocodeAddressIntentService"
-            android:exported="false"/>
-
         <activity
             android:name=".views.MainActivity"
             android:launchMode="singleTop"
