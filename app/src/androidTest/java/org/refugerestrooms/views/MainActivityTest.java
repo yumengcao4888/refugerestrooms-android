@@ -1,7 +1,7 @@
 package org.refugerestrooms.views;
 
-import android.support.test.rule.ActivityTestRule;
-import android.support.test.runner.AndroidJUnit4;
+import androidx.test.rule.ActivityTestRule;
+import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -26,5 +26,3 @@ public class MainActivityTest {
 
     }
 }
-
-

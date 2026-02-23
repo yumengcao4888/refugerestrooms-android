@@ -6,4 +6,5 @@ mainClassName = "org.refugerestrooms.RestroomsDaoGenerator"
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation 'de.greenrobot:greendao-generator:2.1.0'
+    implementation files('libs/freemarker-2.3.23.jar')
 }
