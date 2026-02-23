@@ -21,11 +21,11 @@ android {
         }
     }
     namespace "org.refugerestrooms"
-    compileSdk 30
+    compileSdk 33
     defaultConfig {
         applicationId "org.refugerestrooms"
         minSdkVersion 19
-        targetSdkVersion 30
+        targetSdkVersion 33
         versionCode 20
         versionName "1.7.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
