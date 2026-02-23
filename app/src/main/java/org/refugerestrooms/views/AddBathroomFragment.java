@@ -6,7 +6,7 @@ import android.content.Context;
  */
 
 import android.os.Bundle;
-import android.support.v4.app.Fragment;
+import androidx.fragment.app.Fragment;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -23,6 +23,8 @@ public class AddBathroomFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // setRetainInstance is deprecated in AndroidX, but kept for compatibility here if needed.
+        // However, usually it's better to use ViewModels.
         setRetainInstance(true);
     }
 

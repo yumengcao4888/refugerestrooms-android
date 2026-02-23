@@ -14,6 +14,7 @@ import org.refugerestrooms.R;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import androidx.fragment.app.Fragment;
 import android.text.Html;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
@@ -25,7 +26,7 @@ import android.widget.TextView;
 
 import java.io.UnsupportedEncodingException;
 
-public class InfoViewFragment extends android.support.v4.app.Fragment {
+public class InfoViewFragment extends Fragment {
 
     public static final String EXTRA_BATHROOM = "bathroom";
     protected static final String TAG = InfoViewFragment.class.getSimpleName();
