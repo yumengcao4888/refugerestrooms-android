@@ -21,7 +21,7 @@ android {
         }
     }
     namespace "org.refugerestrooms"
-    compileSdkVersion 28
+    compileSdk 30
     defaultConfig {
         applicationId "org.refugerestrooms"
         minSdkVersion 19
@@ -33,7 +33,7 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
         }
         debug {
