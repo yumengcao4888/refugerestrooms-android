@@ -41,9 +41,6 @@ android {
             applicationIdSuffix ".debug"
         }
     }
-    dexOptions {
-        dexInProcess = false
-    }
 }
 
 dependencies {
