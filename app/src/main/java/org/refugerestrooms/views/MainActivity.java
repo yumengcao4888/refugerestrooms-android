@@ -10,12 +10,10 @@ import android.content.Intent;
 import android.content.IntentSender;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.location.Address;
 import android.location.Location;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
 import android.text.Html;
 import android.util.Log;
 import android.view.Menu;
@@ -26,6 +24,8 @@ import android.widget.SearchView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.EdgeToEdge;
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AppCompatActivity;
@@ -47,7 +47,6 @@ import androidx.work.WorkManager;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.common.api.ApiException;
-import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.ResolvableApiException;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
@@ -93,8 +92,6 @@ import java.util.Map;
 
 public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener,
-        GoogleApiClient.ConnectionCallbacks,
-        GoogleApiClient.OnConnectionFailedListener,
         OnMapReadyCallback,
         ActivityCompat.OnRequestPermissionsResultCallback,
         LocationListener,
@@ -108,7 +105,6 @@ public class MainActivity extends AppCompatActivity
     private Toolbar mToolbar;
     private MapView mMapView;
     private GoogleMap mMap;
-    private GoogleApiClient mGoogleApiClient;
     private FusedLocationProviderClient mFusedLocationClient;
     private LocationRequest mLocationRequest;
     private LocationRequest mSingleLocationRequest;
@@ -144,9 +140,6 @@ public class MainActivity extends AppCompatActivity
     // A fast frequency ceiling in milliseconds
     private static final long FASTEST_INTERVAL =
             MILLISECONDS_PER_SECOND * FASTEST_INTERVAL_IN_SECONDS;
-
-    // Store the current activity recognition client
-    //private ActivityRecognitionClient mActivityRecognitionClient;
 
     /*
      * Define a request code to send to Google Play services
@@ -215,53 +208,43 @@ public class MainActivity extends AppCompatActivity
                  * If the result code is Activity.RESULT_OK, try
                  * to connect again
                  */
-                switch (resultCode) {
-                    case Activity.RESULT_OK:
+                if (resultCode == Activity.RESULT_OK) {
                         /*
                          * Try the request again
                          */
-                        break;
-                    default:
-                        break;
                 }
+                break;
                 // Covers a request to turn on the location service
             case LOCATION_SETTINGS_REQUEST:
                 // If the result is okay, location should now be enabled
                 Log.d("RefugeRestrooms", "Location Settings Request Code");
-                switch (resultCode) {
-                    case Activity.RESULT_OK:
-                        Log.d("RefugeRestrooms", "Activity Result Okay");
-                        // Create the callback for the location check
-                        LocationCallback oneTimeLocationCallback = new LocationCallback() {
-                            @Override
-                            public void onLocationResult(LocationResult locationResult) {
-                                // Updates the current location and position
-                                mCurrentLocation = locationResult.getLastLocation();
-                                if (mCurrentLocation != null) {
-                                    double tmpLat = mCurrentLocation.getLatitude();
-                                    double tmpLng = mCurrentLocation.getLongitude();
-                                    String curLatLng = "lat=" + Double.toString(tmpLat) + "&lng=" + Double.toString(tmpLng);
-                                    mCurrentPosition = new LatLng(tmpLat, tmpLng);
-                                    // Move the camera to the new position
-                                    mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(mCurrentPosition, 15));
-                                    onLocationChanged(mCurrentLocation);
-                                    // Performs a search on that location
-                                    mServer.performSearch(curLatLng, true);
-                                    mStart = mCurrentPosition;
-                                    mSearchHereButton.setVisibility(View.INVISIBLE);
-                                }
+                if (resultCode == Activity.RESULT_OK) {
+                    Log.d("RefugeRestrooms", "Activity Result Okay");
+                    // Create the callback for the location check
+                    LocationCallback oneTimeLocationCallback = new LocationCallback() {
+                        @Override
+                        public void onLocationResult(LocationResult locationResult) {
+                            // Updates the current location and position
+                            mCurrentLocation = locationResult.getLastLocation();
+                            if (mCurrentLocation != null) {
+                                double tmpLat = mCurrentLocation.getLatitude();
+                                double tmpLng = mCurrentLocation.getLongitude();
+                                String curLatLng = "lat=" + Double.toString(tmpLat) + "&lng=" + Double.toString(tmpLng);
+                                mCurrentPosition = new LatLng(tmpLat, tmpLng);
+                                // Move the camera to the new position
+                                mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(mCurrentPosition, 15));
+                                onLocationChanged(mCurrentLocation);
+                                // Performs a search on that location
+                                mServer.performSearch(curLatLng, true);
+                                mStart = mCurrentPosition;
+                                mSearchHereButton.setVisibility(View.INVISIBLE);
                             }
-                        };
-                        // Request a single location for the callback
-                        getSingleLocation(oneTimeLocationCallback);
-                        break;
-                    case Activity.RESULT_CANCELED:
-                        // The user declined to turn their location on,
-                        // nothing else to do
-                        break;
-                    default:
-                        break;
+                        }
+                    };
+                    // Request a single location for the callback
+                    getSingleLocation(oneTimeLocationCallback);
                 }
+                break;
             default:
                 break;
         }
@@ -289,88 +272,6 @@ public class MainActivity extends AppCompatActivity
             }
             return false;
         }
-    }
-
-    /*
-     * Called by Location Services when the request to connect the
-     * client finishes successfully. At this point, you can
-     * request the current location or mStart periodic updates
-     */
-    @Override
-    public void onConnected(Bundle dataBundle) {
-        //TODO break up this method a bit, new Fused version takes more lines of code
-        if (servicesConnected()) {
-            // Display the connection status
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    Snackbar.make(mFab, R.string.connected, Snackbar.LENGTH_SHORT).show();
-                }
-            });
-
-            // If already requested, mStart periodic updates
-            // 3rd parameter just (this)?
-            if (mUpdatesRequested) {
-                // Check if have access to location already, if not, prompt
-                startLocationUpdates();
-            }
-            //TODO debug this part when no wifi/gps/mobile
-
-            // Create a success listener that will trigger when the last location is found.
-            // Then send the listener to be added to the mFusedLocationClient via getLastLocation()
-            OnSuccessListener<Location> onSuccessListener = new OnSuccessListener<Location>() {
-                @Override
-                public void onSuccess(Location location) {
-                    // Gets bathroom data from RefugeRestrooms.org
-                    // (20 closest entries -- defined in Server.java)
-                    mCurrentLocation = location;
-                    String curLatLng;
-                    if (mCurrentLocation != null) {
-                        double tmpLat = mCurrentLocation.getLatitude();
-                        double tmpLng = mCurrentLocation.getLongitude();
-                        mCurrentPosition = new LatLng(tmpLat, tmpLng);
-                        mStart = mCurrentPosition;
-                        onLocationChanged(mCurrentLocation);
-                        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(mCurrentPosition, 15));
-
-                        // String manipulation here to get in the right format for API call
-                        curLatLng = "lat=" + Double.toString(tmpLat) + "&lng=" + Double.toString(tmpLng);
-                        mServer.performSearch(curLatLng, true);
-                    }
-                }
-            };
-            getLastLocation(onSuccessListener);
-        }
-        mMap.setOnMyLocationButtonClickListener(new GoogleMap
-                .OnMyLocationButtonClickListener() {
-            @Override
-            public boolean onMyLocationButtonClick() {
-                // Check for location permissions, and prompt if unavailable
-                OnSuccessListener<Location> successListener = new OnSuccessListener<Location>() {
-                    @Override
-                    public void onSuccess(Location location) {
-                        mCurrentLocation = location;
-                        if (mCurrentLocation != null) {
-                            // Assemble new position
-                            double tmpLat = mCurrentLocation.getLatitude();
-                            double tmpLng = mCurrentLocation.getLongitude();
-                            String curLatLng = "lat=" + Double.toString(tmpLat) + "&lng=" + Double.toString(tmpLng);
-                            mCurrentPosition = new LatLng(tmpLat, tmpLng);
-                            // Move camera to new position
-                            mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(mCurrentPosition, 15));
-                            onLocationChanged(mCurrentLocation);
-                            // Launch bathroom search for new position
-                            mServer.performSearch(curLatLng, true);
-                            mStart = mCurrentPosition;
-                            mSearchHereButton.setVisibility(View.INVISIBLE);
-                        }
-                    }
-                };
-                // Send the listener to be attached to the FusedLocationClient
-                getLastLocation(successListener);
-                return false;
-            }
-        });
     }
 
     // Updates the bottom sheet with the latest selected item
@@ -448,53 +349,13 @@ public class MainActivity extends AppCompatActivity
         behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
     }
 
-    public void onConnectionSuspended(int i) {
-        // Log.i(TAG, "GoogleApiClient connection has been suspend");
-    }
-
-    /*
-     * Called by Location Services if the attempt to
-     * Location Services fails.
-     */
-    @Override
-    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
-        /*
-         * Google Play services can resolve some errors it detects.
-         * If the error has a resolution, try sending an Intent to
-         * mStart a Google Play services activity that can resolve
-         * error.
-         */
-        // Turn off the request flag
-        if (connectionResult.hasResolution()) {
-            try {
-                // Start an Activity that tries to resolve the error
-                connectionResult.startResolutionForResult(
-                        this,
-                        CONNECTION_FAILURE_RESOLUTION_REQUEST);
-                /*
-                 * Thrown if Google Play services canceled the original
-                 * PendingIntent
-                 */
-            } catch (IntentSender.SendIntentException e) {
-                // Log the error
-                //e.printStackTrace();
-            }
-        } else {
-            /*
-             * If no resolution is available, display a dialog to the
-             * user with the error.
-             */
-            showErrorDialog(connectionResult.getErrorCode());
-        }
-    }
-
     void showErrorDialog(int code) {
         GoogleApiAvailability.getInstance().getErrorDialog(this, code,
                 CONNECTION_FAILURE_RESOLUTION_REQUEST).show();
     }
 
     @Override
-    protected void onSaveInstanceState(Bundle outState) {
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
         if (mCurrentLocation != null) {
             outState.putParcelable(CURRENT_LOCATION_KEY, mCurrentLocation);
         } else {
@@ -505,6 +366,7 @@ public class MainActivity extends AppCompatActivity
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        EdgeToEdge.enable(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
@@ -552,6 +414,22 @@ public class MainActivity extends AppCompatActivity
         fragmentTransaction.commit();
 
         bottomSheet = findViewById(R.id.bottom_info_sheet);
+
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                BottomSheetBehavior behavior = BottomSheetBehavior.from(bottomSheet);
+                if (drawer.isDrawerOpen(GravityCompat.START)) {
+                    drawer.closeDrawer(GravityCompat.START);
+                } else if (behavior.getState() == BottomSheetBehavior.STATE_EXPANDED) {
+                    behavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+                } else {
+                    setEnabled(false);
+                    getOnBackPressedDispatcher().onBackPressed();
+                    setEnabled(true);
+                }
+            }
+        });
 
         // For search results
         handleIntent(getIntent());
@@ -848,22 +726,6 @@ public class MainActivity extends AppCompatActivity
         }
     }
 
-    /*
-     * Called when the Activity is no longer visible.
-     */
-    @Override
-    protected void onStop() {
-        // If the client is connected
-        if (mGoogleApiClient != null) {
-            /*
-             * After disconnect() is called, the client is
-             * considered "dead".
-             */
-            mGoogleApiClient.disconnect();
-        }
-        super.onStop();
-    }
-
     /**
      * Called each time the current location is updated.
      * Saves the current location to shared prefs for offline location defaults.
@@ -893,32 +755,23 @@ public class MainActivity extends AppCompatActivity
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        switch (requestCode) {
-            case MY_PERMISSIONS_ACCESS_FINE_LOCATION:
-                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    mGoogleApiClient = new GoogleApiClient.Builder(this)
-                            .addApi(LocationServices.API)
-                            .addConnectionCallbacks(this)
-                            .addOnConnectionFailedListener(this)
-                            .build();
-                    mGoogleApiClient.connect();
-                    if (ActivityCompat.checkSelfPermission(this,
-                            Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
-                            ActivityCompat.checkSelfPermission(this,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                        // Prompt for permissions
-                        ActivityCompat.requestPermissions(MainActivity.this,
-                                new String[]{Manifest.permission.ACCESS_COARSE_LOCATION,
-                                        Manifest.permission.ACCESS_FINE_LOCATION},
-                                MY_PERMISSIONS_ACCESS_FINE_LOCATION);
-                    }
-                    mMap.setMyLocationEnabled(true);
-                } else {
-                    // In case they would like to change their mind about permissions
-                    mMap.setMyLocationEnabled(true);
+        if (requestCode == MY_PERMISSIONS_ACCESS_FINE_LOCATION) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                if (ActivityCompat.checkSelfPermission(this,
+                        Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+                        ActivityCompat.checkSelfPermission(this,
+                                Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    // Prompt for permissions
+                    ActivityCompat.requestPermissions(MainActivity.this,
+                            new String[]{Manifest.permission.ACCESS_COARSE_LOCATION,
+                                    Manifest.permission.ACCESS_FINE_LOCATION},
+                            MY_PERMISSIONS_ACCESS_FINE_LOCATION);
                 }
-            default:
-                break;
+                mMap.setMyLocationEnabled(true);
+            } else {
+                // In case they would like to change their mind about permissions
+                mMap.setMyLocationEnabled(true);
+            }
         }
     }
 
@@ -986,14 +839,38 @@ public class MainActivity extends AppCompatActivity
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
                     MY_PERMISSIONS_ACCESS_FINE_LOCATION);
         } else {
-            mGoogleApiClient = new GoogleApiClient.Builder(this)
-                    .addApi(LocationServices.API)
-                    .addConnectionCallbacks(this)
-                    .addOnConnectionFailedListener(this)
-                    .build();
-            mGoogleApiClient.connect();
             mMap.setMyLocationEnabled(true);
         }
+        
+        mMap.setOnMyLocationButtonClickListener(new GoogleMap.OnMyLocationButtonClickListener() {
+            @Override
+            public boolean onMyLocationButtonClick() {
+                // Check for location permissions, and prompt if unavailable
+                OnSuccessListener<Location> successListener = new OnSuccessListener<Location>() {
+                    @Override
+                    public void onSuccess(Location location) {
+                        mCurrentLocation = location;
+                        if (mCurrentLocation != null) {
+                            // Assemble new position
+                            double tmpLat = mCurrentLocation.getLatitude();
+                            double tmpLng = mCurrentLocation.getLongitude();
+                            String curLatLng = "lat=" + Double.toString(tmpLat) + "&lng=" + Double.toString(tmpLng);
+                            mCurrentPosition = new LatLng(tmpLat, tmpLng);
+                            // Move camera to new position
+                            mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(mCurrentPosition, 15));
+                            onLocationChanged(mCurrentLocation);
+                            // Launch bathroom search for new position
+                            mServer.performSearch(curLatLng, true);
+                            mStart = mCurrentPosition;
+                            mSearchHereButton.setVisibility(View.INVISIBLE);
+                        }
+                    }
+                };
+                // Send the listener to be attached to the FusedLocationClient
+                getLastLocation(successListener);
+                return false;
+            }
+        });
     }
 
     // Handles both the address search in the action bar and the nearest locations search when gps is on
@@ -1105,9 +982,9 @@ public class MainActivity extends AppCompatActivity
         mMap.setOnCameraMoveListener(new GoogleMap.OnCameraMoveListener() {
             @Override
             public void onCameraMove() {
-                if (mCurrentPosition.latitude != 0.0d && mCurrentPosition.longitude != 0.0) {
+                if (mCurrentPosition != null && (mCurrentPosition.latitude != 0.0d && mCurrentPosition.longitude != 0.0)) {
                     mSearchHereButton.setVisibility(View.VISIBLE);
-                } else {
+                } else if (mCurrentLocation != null) {
                     mCurrentPosition = mMap.getCameraPosition().target;
                     mCurrentLocation.setLatitude(mCurrentPosition.latitude);
                     mCurrentLocation.setLongitude(mCurrentPosition.longitude);
@@ -1191,19 +1068,6 @@ public class MainActivity extends AppCompatActivity
         if (mCurrentLocation != null) {
             mEnd = marker.getPosition();
             setToolbarTitle(marker.getTitle());
-        }
-    }
-
-    @Override
-    public void onBackPressed() {
-        DrawerLayout drawer = findViewById(R.id.drawer_layout);
-        BottomSheetBehavior behavior = BottomSheetBehavior.from(bottomSheet);
-        if (drawer.isDrawerOpen(GravityCompat.START)) {
-            drawer.closeDrawer(GravityCompat.START);
-        } else if (behavior.getState() == BottomSheetBehavior.STATE_EXPANDED) {
-            behavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
-        } else {
-            super.onBackPressed();
         }
     }
 
